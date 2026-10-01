@@ -249,7 +249,7 @@ export default function VideoMeetComponent(){
                     frameCount++;
                     
                     if (frameCount % 15 === 0) {
-                        // Case A: Video is ON and Faces are detected
+                        // Video is ON and Faces are detected
                         if (isVideoActive && Array.isArray(visualDataArray) && visualDataArray.length > 0) {
                             visualDataArray.forEach(face => {
                                 console.log(`[Veri-Human ML Pipeline - Face ${face.faceIndex}]`, {
