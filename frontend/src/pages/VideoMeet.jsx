@@ -220,38 +220,75 @@ export default function VideoMeetComponent(){
         console.log("[Veri-Human] ML Pipeline Loop Started.");
 
         const processFrame = async () => {
-            if (localVideoRef.current && hiddenCanvasRef.current && window.localStream) {
-                // Ensure video is actively playing and has dimensions
-                if (localVideoRef.current.readyState >= 2 && !localVideoRef.current.paused) {
-                    const visualData = extractFacialFeatures(localVideoRef.current, hiddenCanvasRef.current);
-                    const audioData = extractAudioFeatures();
+            if (window.localStream) {
+                // Read the live UI toggle states using the refs you already created!
+                const isVideoActive = currentVideoState.current;
+                const isAudioActive = currentAudioState.current;
 
-                    if (visualData || audioData) {
-                        frameCount++;
-                        // Log every 15 frames (~2 times per sec) to keep console readable
-                        if (frameCount % 15 === 0) {
-                            console.log("[Veri-Human ML Pipeline]", {
-                                ear_liveness: visualData ? visualData.ear.toFixed(3) : "No Face",
-                                mar_lipsync: visualData ? visualData.mar.toFixed(3) : "No Face",
-                                plosive_spike: audioData ? audioData.isPlosiveSpike : false,
-                                mfcc_0: audioData && audioData.mfccArray ? audioData.mfccArray[0]?.toFixed(2) : "No Audio",
+                // IF BOTH ARE OFF: Send nothing and skip math to save CPU
+                if (!isVideoActive && !isAudioActive) {
+                    animationFrameRef.current = requestAnimationFrame(processFrame);
+                    return; 
+                }
+
+                let visualDataArray = null;
+                let audioData = null;
+
+                // Try to extract visual data (ONLY if video is active)
+                if (isVideoActive && localVideoRef.current && hiddenCanvasRef.current && localVideoRef.current.readyState >= 2 && !localVideoRef.current.paused) {
+                    visualDataArray = extractFacialFeatures(localVideoRef.current, hiddenCanvasRef.current);
+                }
+
+                // Try to extract audio data (ONLY if audio is active)
+                if (isAudioActive) {
+                    audioData = extractAudioFeatures();
+                }
+
+                // Process whatever data we successfully extracted
+                if (visualDataArray || audioData) {
+                    frameCount++;
+                    
+                    if (frameCount % 15 === 0) {
+                        // Case A: Video is ON and Faces are detected
+                        if (isVideoActive && Array.isArray(visualDataArray) && visualDataArray.length > 0) {
+                            visualDataArray.forEach(face => {
+                                console.log(`[Veri-Human ML Pipeline - Face ${face.faceIndex}]`, {
+                                    ear_liveness: face.ear.toFixed(3),
+                                    mar_lipsync: face.mar.toFixed(3),
+                                    plosive_spike: audioData ? audioData.isPlosiveSpike : false,
+                                    mfcc_0: audioData && audioData.mfccArray ? audioData.mfccArray[0]?.toFixed(2) : "No Audio",
+                                    timestamp: performance.now()
+                                });
+                            });
+                        } 
+                        // Video is OFF, but Audio is ON
+                        else if (isAudioActive && audioData) {
+                            console.log(`[Veri-Human ML Pipeline - Audio Only]`, {
+                                ear_liveness: "Camera Off",
+                                mar_lipsync: "Camera Off",
+                                plosive_spike: audioData.isPlosiveSpike,
+                                mfcc_0: audioData.mfccArray ? audioData.mfccArray[0]?.toFixed(2) : "No Audio",
                                 timestamp: performance.now()
                             });
                         }
+                    }
 
-                        // Lip-sync Desync Warning
-                        if (audioData?.isPlosiveSpike && visualData?.mar > 0.15) {
-                            console.warn(`[Veri-Human Alert] Lip-sync Desync: Plosive detected but mouth is open! MAR: ${visualData.mar.toFixed(3)}`);
-                        }
+                    // Lip-sync Desync Warning (Only runs if both audio and video are active)
+                    if (audioData?.isPlosiveSpike && Array.isArray(visualDataArray)) {
+                        visualDataArray.forEach(face => {
+                            if (face.mar > 0.15) {
+                                console.warn(`[Veri-Human Alert - Face ${face.faceIndex}] Lip-sync Desync: Plosive detected but mouth is open! MAR: ${face.mar.toFixed(3)}`);
+                            }
+                        });
                     }
                 }
             }
+            // Recursively call the loop for the next frame
             animationFrameRef.current = requestAnimationFrame(processFrame);
         };
 
         processFrame();
     };
-
     /*useEffect(()=>{
         if(video !== undefined && audio !== undefined){
             getUserMedia();
