@@ -14,12 +14,13 @@ export const AuthProvider = ({children})=>{
     const[userData,setUserData] = useState(authContext);
     //after login go to home
     const router= useNavigate();
-    const handleRegister = async (name, username ,password)=>{
+    const handleRegister = async (name, username, password, email)=>{
         try{
             //post request for register new user
             let request = await client.post("/register", {
                 name: name,
                 username: username,
+                email: email,
                 password: password
             })
             if(request.status === httpStatus.CREATED){
