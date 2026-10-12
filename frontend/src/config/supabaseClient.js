@@ -1,0 +1,15 @@
+import { createClient } from "@supabase/supabase-js";
+
+const supabaseUrl = process.env.REACT_APP_SUPABASE_URL;
+const supabaseAnonKey = process.env.REACT_APP_SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.warn(
+    "Warning: Missing REACT_APP_SUPABASE_URL or REACT_APP_SUPABASE_ANON_KEY in frontend environment variables."
+  );
+}
+
+export const supabase = createClient(
+  supabaseUrl || "",
+  supabaseAnonKey || ""
+);
