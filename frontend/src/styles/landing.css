@@ -1,0 +1,289 @@
+.landingPageContainer{ /*done*/
+    position: relative;
+    width: 100%;
+    height: 100vh;
+    background: linear-gradient(130.07deg, #2D4F2E 14.55%, #4A824C 50%, #67B569 85.45%);
+    display: flex;
+    flex-direction: column;
+    font-family: 'Google Sans', Roboto, Arial, sans-serif;
+    overflow: hidden;
+}
+
+.landingPageContainer nav {/*done*/
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 24px;
+    width: 100%;
+    box-sizing: border-box;
+    height: 64px;
+    background: #D9D9D94F;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(200, 200, 200, 0.5);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    position: sticky;
+    z-index: 1000;
+}
+
+.navHeader {
+    display: flex;
+    align-items: center;
+    user-select: none;
+    gap: 20px;
+    
+}
+
+.navHeader img {
+    height: 48px;
+    width: 48px;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+.navHeader p {
+  font-size: 25px;
+  color: #002F06;
+  font-weight: 700;
+  font-family: 'Product Sans', 'Google Sans', Arial, sans-serif;
+  letter-spacing: -0.5px;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.navHeader p:hover {
+  opacity: 0.75;
+  transform: scale(1.02);
+}
+
+
+.landingPageContainer nav .navlist { /*done*/
+    display: flex;
+    gap: 2rem; 
+    align-items: center;
+    cursor: pointer;
+    font-size: 19px;     
+    font-weight: 500px;
+}
+
+
+.landingPageContainer nav .navlist p { /*done*/
+    margin: 0;
+    color: #ffffff; 
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6); 
+    transition: all 0.3s ease; 
+    font-size: 19px;     
+    font-weight: 500px;
+    background: #207736;
+    color: var(--Schemes-Inverse-On-Surface, #F5EFF7);
+    opacity: 1;
+    border-radius: 80px;
+    cursor: pointer;
+    margin: 0;
+    padding: 8px 16px;  
+    border-radius: 20px;  
+    transition: all 0.2s ease;
+}
+
+.landingPageContainer nav .navlist p:hover { /*done*/
+    color: #F5EFF7;                       
+    text-shadow: none;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+/* Main Container */
+.landingMainContainer {
+    display: flex;
+    justify-content: space-between;
+    padding: 0 8vw;
+    min-height: calc(100vh - 85px);
+    align-items: center;
+    gap: 20px;
+}
+
+.landingMainContainer > div:nth-child(1) {
+    flex: 1;
+    display: flex;
+    max-width: 460px;
+    flex-direction: column;
+    align-items: stretch;
+    animation: fadeUp 0.8s ease-out;
+}
+
+.landingMainContainer > div:nth-child(1) h1 {
+    font-size: 3.2rem;
+    font-family: 'Space Mono', monospace;
+    line-height: 1.1;
+    margin: 0 0 12px;
+    background: none;
+    -webkit-background-clip: border-box;
+    -webkit-text-fill-color: #ffffff;
+    color: #ffffff;
+}
+
+.landingMainContainer > div:nth-child(1) h1 .veri {
+    font-weight: 400;
+}
+
+.landingMainContainer > div:nth-child(1) h1 .human {
+    font-weight: 700;
+}
+
+.landingMainContainer > div:nth-child(1) p {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 300;
+    line-height: 1.55;
+    color: rgba(255, 255, 255, 0.72);
+}
+
+.landingMainContainer > div:nth-child(1) div[role='button'] {
+    background: #207736; 
+    width: fit-content;
+    padding: 14px 36px;
+    border-radius: 30px; 
+    margin-top: 2.5rem;
+    box-shadow: 0 10px 25px rgba(8, 95, 16, 0.3);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+}
+
+.landingMainContainer > div:nth-child(1) div[role='button']:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.landingMainContainer > div:nth-child(1) div[role='button'] a {
+    text-decoration: none;
+    color: #f9fafb; 
+    font-size: 1.2rem;
+    font-weight: 700;
+}
+
+/* Right Image Section */
+.landingMainContainer > div:nth-child(2) {
+    flex: 1.6;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+}
+
+.landingMainContainer > div:nth-child(2) img {
+    height: auto;
+    width: 100%;
+    max-width: 800px;
+    border-radius: 20px;
+    animation: floatImage 6s ease-in-out infinite;
+    filter: drop-shadow(0 20px 30px rgba(0, 0, 0, 0.4));
+}
+
+.landingDate {
+    position: absolute;
+    left: 28px;
+    bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #ffffff;
+    font-size: 1.35rem;
+    font-weight: 600;
+}
+
+.landingDate svg {
+    font-size: 1.7rem;
+}
+
+.landingDate .divider {
+    width: 2px;
+    height: 28px;
+    background: rgba(255, 255, 255, 0.85);
+}
+
+.landingDate sup {
+    font-size: 0.6em;
+}
+
+/* Keyframes for smooth entry and floating animations */
+@keyframes fadeUp {
+    from { opacity: 0; transform: translateY(30px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+@keyframes floatImage {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-15px); }
+    100% { transform: translateY(0px); }
+}
+@media screen and (max-width: 1024px) {
+    .landingMainContainer, .meetContainer {
+        padding: 40px 5vw;
+        gap: 30px;
+    }
+    
+    .lobbyContent {
+        gap: 40px;
+        padding: 0 20px;
+    }
+    
+    .conferenceView {
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+    
+    .chatRoom {
+        width: 300px;
+    }
+}
+@media screen and (max-width: 768px) {
+    .landingPageContainer {
+        height: auto;
+        min-height: 100vh;
+    }
+
+    .landingPageContainer nav {
+        flex-direction: row;
+        flex-wrap: nowrap;
+        justify-content: space-between;
+        align-items: center;
+        gap: 8px;
+        height: 60px;
+        padding: 0px 12px;
+    }
+    
+    .landingPageContainer nav .navlist {
+        width: auto;
+        justify-content: flex-end;
+        flex-wrap: nowrap; 
+        gap: 6px;
+    }
+
+    .landingPageContainer nav .navlist p {
+        font-size: 0.9rem;
+        padding: 6px 12px;
+        white-space: nowrap;
+    }
+    
+    .landingMainContainer {
+        flex-direction: column;
+        text-align: center;
+        padding: 40px 5vw 80px;
+        gap: 40px;
+    }
+    
+    .landingMainContainer > div:nth-child(1) {
+        align-items: center;
+        max-width: 100%;
+    }
+    
+    .landingMainContainer > div:nth-child(1) h1 {
+        font-size: 2.6rem;
+    }
+
+    .landingMainContainer > div:nth-child(2) {
+        justify-content: center;
+    }
+
+    .landingDate {
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: 16px;
+        font-size: 1.1rem;
+    }
+}
