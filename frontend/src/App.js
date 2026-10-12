@@ -13,7 +13,6 @@ function App() {
         <AuthProvider>
         <Routes>
           <Route path='/' element={<LandingPage/>}/>
-          <Route path='/:auth' element={<Authentication/>}/>
           <Route path='/home' element={<HomeComponent/>}/>
           <Route path='/auth' element={<Authentication/>}/>
           <Route path='/history' element={<History/>}/>
