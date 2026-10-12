@@ -72,6 +72,9 @@ export default function VideoMeetComponent(){
     // without triggering React component re-renders every millisecond.
     let hiddenCanvasRef = useRef(null);
     let animationFrameRef = useRef(null);
+    let emojiLaneRef = useRef(0);
+    const MAX_EMOJI_LANES = 6; 
+    const EMOJI_LANE_WIDTH = 65;
     let [videoAvailable, setVideoAvailable] = useState(true);
     let [audioAvailable, setAudioAvailable] = useState(true);
     let [video, setVideo] = useState(false);
@@ -525,9 +528,18 @@ export default function VideoMeetComponent(){
             socketIdRef.current = socketRef.current.id
             socketRef.current.on("chat-message", addMessage)
             socketRef.current.on("receive-emoji", (data) => {
-                const newEmoji = { id: Date.now() + Math.random(), emoji: data.emoji, senderName: data.senderName };
+                const currentLane = emojiLaneRef.current;
+                emojiLaneRef.current = (emojiLaneRef.current + 1) % MAX_EMOJI_LANES;
+                const calculatedLeftOffset = currentLane * EMOJI_LANE_WIDTH;
+
+                const newEmoji = { 
+                    id: Date.now() + Math.random(), 
+                    emoji: data.emoji, 
+                    senderName: data.senderName,
+                    leftOffset: calculatedLeftOffset 
+                };
                 setFloatingEmojis((prev) => [...prev, newEmoji]);
-            
+                
                 setTimeout(() => {
                     setFloatingEmojis((prev) => prev.filter((e) => e.id !== newEmoji.id));
                 }, 4000);
@@ -750,9 +762,6 @@ export default function VideoMeetComponent(){
         }
     };
     const handleSendEmoji = (emoji) => {
-        setShowEmojiPicker(false);
-        
-        // Broadcast to others
         if (socketRef.current) {
             socketRef.current.emit("send-emoji", {
                 emoji: emoji,
@@ -760,14 +769,21 @@ export default function VideoMeetComponent(){
             });
         }
     
-        // Show locally
-        const newEmoji = { id: Date.now() + Math.random(), emoji, senderName: "You" };
+        const currentLane = emojiLaneRef.current;
+        emojiLaneRef.current = (emojiLaneRef.current + 1) % MAX_EMOJI_LANES;
+        const calculatedLeftOffset = currentLane * EMOJI_LANE_WIDTH;
+
+        const newEmoji = { 
+            id: Date.now() + Math.random(), 
+            emoji, 
+            senderName: "You",
+            leftOffset: calculatedLeftOffset
+        };
         setFloatingEmojis((prev) => [...prev, newEmoji]);
     
-        // Remove emoji after animation (3 seconds)
         setTimeout(() => {
             setFloatingEmojis((prev) => prev.filter((e) => e.id !== newEmoji.id));
-        }, 3000);
+        }, 4000);
     };
     const connect = async () => {
         if (!username || username.trim() === "") {
@@ -1046,27 +1062,19 @@ export default function VideoMeetComponent(){
                 </div>
             ) : (
                 <div className={styles.mainMeetingArea}ref={meetingWrapperRef} id="meeting-wrapper">
-                    <div style={{
-                        position: 'absolute',
-                        left: '24px',
-                        bottom: '100px',
-                        display: 'flex',
-                        flexDirection: 'column-reverse',
-                        gap: '16px',
-                        zIndex: 50,
-                        pointerEvents: 'none'
-                    }}>
+                    <div className={styles.floatingEmojiContainer}>
                         {floatingEmojis.map((item) => (
                             <div key={item.id} className={styles.floatingEmojiWrapper}>
-                                <div style={{ fontSize: '40px' }}>{item.emoji}</div>
+                                <div style={{ fontSize: '48px' }}>{item.emoji}</div>
                                 <div className={styles.nameLabel} style={{
                                     backgroundColor: 'rgba(0,0,0,0.6)',
                                     color: 'white',
-                                    padding: '2px 8px',
+                                    padding: '4px 10px',
                                     borderRadius: '12px',
                                     fontSize: '12px',
-                                    marginTop: '-10px',
-                                    whiteSpace: 'nowrap'
+                                    marginTop: '4px',
+                                    whiteSpace: 'nowrap',
+                                    fontWeight: 'bold'
                                 }}>
                                     {item.senderName}
                                 </div>
