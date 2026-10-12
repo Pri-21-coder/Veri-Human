@@ -176,31 +176,6 @@
     filter: drop-shadow(0 20px 30px rgba(0, 0, 0, 0.4));
 }
 
-.landingDate {
-    position: absolute;
-    left: 28px;
-    bottom: 24px;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    color: #ffffff;
-    font-size: 1.35rem;
-    font-weight: 600;
-}
-
-.landingDate svg {
-    font-size: 1.7rem;
-}
-
-.landingDate .divider {
-    width: 2px;
-    height: 28px;
-    background: rgba(255, 255, 255, 0.85);
-}
-
-.landingDate sup {
-    font-size: 0.6em;
-}
 
 /* Keyframes for smooth entry and floating animations */
 @keyframes fadeUp {
@@ -278,12 +253,5 @@
 
     .landingMainContainer > div:nth-child(2) {
         justify-content: center;
-    }
-
-    .landingDate {
-        left: 50%;
-        transform: translateX(-50%);
-        bottom: 16px;
-        font-size: 1.1rem;
     }
 }

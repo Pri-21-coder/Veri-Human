@@ -34,12 +34,6 @@ export default function LandingPage() {
                     <img src="/landing.svg" alt="" />
                 </div>
             </div>
-
-            <div className="landingDate">
-                <CalendarMonthOutlinedIcon />
-                <span className="divider"></span>
-                <span>26<sup>th</sup> August</span>
-            </div>
         </div>
     )
 }
