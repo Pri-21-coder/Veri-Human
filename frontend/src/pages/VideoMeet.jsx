@@ -9,6 +9,8 @@ import VideocamIcon from '@mui/icons-material/Videocam';
 import VideocamOffIcon from '@mui/icons-material/VideocamOff';
 import styles from "../styles/videoComponent.module.css";
 import CallEndIcon from '@mui/icons-material/CallEnd';
+import BackHandIcon from '@mui/icons-material/BackHand';
+import TagFacesIcon from '@mui/icons-material/TagFaces';
 import MicIcon from '@mui/icons-material/Mic';
 import MicOffIcon from '@mui/icons-material/MicOff';
 import ScreenShareIcon from '@mui/icons-material/ScreenShare';
@@ -83,6 +85,11 @@ export default function VideoMeetComponent(){
     //for guest user
     let [askForUsername, setAskForUsername] = useState(true);
     let [username, setUsername] = useState("");
+    let [isHandRaised, setIsHandRaised] = useState(false);
+    let [showEmojiPicker, setShowEmojiPicker] = useState(false);
+    let [floatingEmojis, setFloatingEmojis] = useState([]);
+    let currentHandState = useRef(isHandRaised);
+    useEffect(() => { currentHandState.current = isHandRaised; }, [isHandRaised]);
     const videoRef = useRef([]);
     let [videos, setVideos] = useState([]);
     const meetingWrapperRef = useRef(null);
@@ -517,6 +524,14 @@ export default function VideoMeetComponent(){
             socketRef.current.emit("join-call", window.location.href,username)
             socketIdRef.current = socketRef.current.id
             socketRef.current.on("chat-message", addMessage)
+            socketRef.current.on("receive-emoji", (data) => {
+                const newEmoji = { id: Date.now() + Math.random(), emoji: data.emoji, senderName: data.senderName };
+                setFloatingEmojis((prev) => [...prev, newEmoji]);
+            
+                setTimeout(() => {
+                    setFloatingEmojis((prev) => prev.filter((e) => e.id !== newEmoji.id));
+                }, 4000);
+            });
             socketRef.current.on("user-left", (id)=>{
                 setVideos((prevVideos) => prevVideos.filter((v) => v.socketId !== id));
                 if (connections[id]) {
@@ -533,7 +548,13 @@ export default function VideoMeetComponent(){
                     )
                 );
             });
-
+            socketRef.current.on("hand-status-change", (data) => {
+                setVideos((prevVideos) =>
+                    prevVideos.map((v) =>
+                        v.socketId === data.socketId ? { ...v, handRaised: data.raised } : v
+                    )
+                );
+            });
             // Existing user detects a newcomer
             socketRef.current.on("user-joined", (incomingSocketId, incomingUsername) => {
                 // Pre-create the video card
@@ -544,7 +565,8 @@ export default function VideoMeetComponent(){
                             username: incomingUsername,
                             stream: null,
                             videoEnabled: true,
-                            audioEnabled: true
+                            audioEnabled: true,
+                            handRaised: false
                         }];
                     }
                     return prevVideos;
@@ -561,6 +583,9 @@ export default function VideoMeetComponent(){
                             socketId: socketIdRef.current,
                             trackType: 'audio',
                             enabled: currentAudioState.current
+                        });
+                        socketRef.current.emit("hand-status-change", { 
+                            raised: currentHandState.current 
                         });
                     }
                 }, 1000);
@@ -596,7 +621,7 @@ export default function VideoMeetComponent(){
                     const newVideos = [...prevVideos];
                     existingUsers.forEach((user) => {
                         if (user.socketId !== socketIdRef.current && !newVideos.find(v => v.socketId === user.socketId)) {
-                            newVideos.push({ socketId: user.socketId, username: user.username, stream: null, videoEnabled: true, audioEnabled: true });
+                            newVideos.push({ socketId: user.socketId, username: user.username, stream: null, videoEnabled: true, audioEnabled: true, handRaised: false});
                         }
                     });
                     return newVideos;
@@ -717,7 +742,33 @@ export default function VideoMeetComponent(){
         setAudio(newState);
         handleToggle('audio', newState);
     };
-
+    const handleRaiseHand = () => {
+        const newState = !isHandRaised;
+        setIsHandRaised(newState);
+        if (socketRef.current) {
+            socketRef.current.emit("hand-status-change", { raised: newState });
+        }
+    };
+    const handleSendEmoji = (emoji) => {
+        setShowEmojiPicker(false);
+        
+        // Broadcast to others
+        if (socketRef.current) {
+            socketRef.current.emit("send-emoji", {
+                emoji: emoji,
+                senderName: username || "Guest"
+            });
+        }
+    
+        // Show locally
+        const newEmoji = { id: Date.now() + Math.random(), emoji, senderName: "You" };
+        setFloatingEmojis((prev) => [...prev, newEmoji]);
+    
+        // Remove emoji after animation (3 seconds)
+        setTimeout(() => {
+            setFloatingEmojis((prev) => prev.filter((e) => e.id !== newEmoji.id));
+        }, 3000);
+    };
     const connect = async () => {
         if (!username || username.trim() === "") {
             alert("Please enter a display name to join the meeting."); 
@@ -851,6 +902,10 @@ export default function VideoMeetComponent(){
             window.location.href = "/home";
         }
     }
+    const allRaisedHands = [
+        ...(isHandRaised ? [{ id: 'local', name: username || "You" }] : []),
+        ...videos.filter(v => v.handRaised).map(v => ({ id: v.socketId, name: v.username || "Guest" }))
+    ];
     return (
         <div className={styles.meetVideoContainer}>
             {/* 
@@ -991,7 +1046,34 @@ export default function VideoMeetComponent(){
                 </div>
             ) : (
                 <div className={styles.mainMeetingArea}ref={meetingWrapperRef} id="meeting-wrapper">
-                    <div style={{ position: 'absolute', top: '24px', left: '24px', display: 'flex', alignItems: 'center', color: 'white', zIndex: 10, fontFamily: 'sans-serif'}}>
+                    <div style={{
+                        position: 'absolute',
+                        left: '24px',
+                        bottom: '100px',
+                        display: 'flex',
+                        flexDirection: 'column-reverse',
+                        gap: '16px',
+                        zIndex: 50,
+                        pointerEvents: 'none'
+                    }}>
+                        {floatingEmojis.map((item) => (
+                            <div key={item.id} className={styles.floatingEmojiWrapper}>
+                                <div style={{ fontSize: '40px' }}>{item.emoji}</div>
+                                <div className={styles.nameLabel} style={{
+                                    backgroundColor: 'rgba(0,0,0,0.6)',
+                                    color: 'white',
+                                    padding: '2px 8px',
+                                    borderRadius: '12px',
+                                    fontSize: '12px',
+                                    marginTop: '-10px',
+                                    whiteSpace: 'nowrap'
+                                }}>
+                                    {item.senderName}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <div className={styles.navBar} style={{ position: 'absolute', top: '24px', left: '24px', display: 'flex', alignItems: 'center', color: 'white', zIndex: 10, fontFamily: 'sans-serif'}}>
                         <span style={{ 
                             fontSize: '1.5rem', 
                             fontWeight: '600',
@@ -1014,6 +1096,26 @@ export default function VideoMeetComponent(){
                         }}>
                             {getMeetingCode()}
                         </span>
+                    </div>
+                    <div style={{ position: 'absolute', top: '24px', right: '120px', display: 'flex', gap: '8px', zIndex: 10 }}>
+                        {allRaisedHands.map((person) => (
+                            <div key={person.id} style={{ 
+                                backgroundColor: '#000000',
+                                opacity: '70%', 
+                                color: '#81c995', 
+                                padding: '11px 12px', 
+                                borderRadius: '16px', 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '7px', 
+                                fontWeight: '500',
+                                fontSize: '18px',
+                                boxShadow: '0 1px 3px rgba(0,0,0,0.3)'
+                            }}>
+                                <BackHandIcon sx={{ fontSize: '16px' }} />
+                                {person.name}
+                            </div>
+                        ))}
                     </div>
                     <div className={styles.videoGridWrapper}>
                         <div className={styles.conferenceView}>
@@ -1062,7 +1164,14 @@ export default function VideoMeetComponent(){
                                             {isAudioOn ? <MicIcon fontSize="small" /> : <MicOffIcon fontSize="small" />}
                                         </div>
                                     </div>
-                                    <div className={styles.nameLabel}>{displayName}</div>
+                                    <div className={styles.nameLabel}style={{
+                                            display: 'flex', alignItems: 'center', gap: '8px', 
+                                            padding: videoInfo.handRaised ? '4px 12px' : '4px 8px',
+                                            backgroundColor: videoInfo.handRaised ? '#81c995' : 'rgba(0,0,0,0.6)',
+                                            color: videoInfo.handRaised ? '#0d3a1f' : 'white',
+                                            borderRadius: '16px'
+                                        }}>
+                                            {videoInfo.handRaised && <BackHandIcon sx={{ fontSize: '16px' }} />}{displayName}</div>
                                         <IconButton
                                         className={styles.fullScreenBtn}
                                         onClick={(e) => {
@@ -1101,7 +1210,14 @@ export default function VideoMeetComponent(){
                             style={{ visibility: (video || screen) ? 'visible' : 'hidden' }}
                             onLoadedMetadata={(e) => e.target.play()}
                             />
-                            <div className={styles.nameLabel}>
+                            <div className={styles.nameLabel}style={{
+                                display: 'flex', alignItems: 'center', gap: '8px', 
+                                padding: isHandRaised ? '4px 12px' : '4px 8px',
+                                backgroundColor: isHandRaised ? '#81c995' : '',
+                                color: isHandRaised ? '#0d3a1f' : 'white',
+                                borderRadius: '16px'
+                            }}>
+                                {isHandRaised && <BackHandIcon sx={{ fontSize: '16px' }} />}
                                 {username || "Guest"} (You)
                             </div>
                             <IconButton
@@ -1120,18 +1236,58 @@ export default function VideoMeetComponent(){
                         </div>
                         {/* Bottom Control Bar */}
                         <div className={styles.buttonContainers}>
-                            <IconButton onClick={handleAudio} sx={{ backgroundColor: '#3c4043', color: 'white', padding: '12px', '&:hover': { backgroundColor: '#5f6368' } }}>
+                            <IconButton onClick={handleAudio} sx={{ backgroundColor: audio ? '#3c4043' : '#FF383C', color: 'white', padding: '12px', '&:hover': { backgroundColor: audio ? '#5f6368': '#c44143' } }}>
                                 {audio ? <MicIcon /> : <MicOffIcon />}
                             </IconButton>
-                            <IconButton onClick={handleVideo} sx={{ backgroundColor: '#3c4043', color: 'white', padding: '12px', '&:hover': { backgroundColor: '#5f6368' } }}>
+                            <IconButton onClick={handleVideo} sx={{ backgroundColor: video ? '#3c4043' : '#FF383C', color: 'white', padding: '12px', '&:hover': { backgroundColor: video ? '#5f6368': '#c44143' } }}>
                                 {video ? <VideocamIcon /> : <VideocamOffIcon />}
                             </IconButton>
-                
+                            <IconButton onClick={handleRaiseHand} sx={{ backgroundColor: '#3c4043', color: 'white', padding: '12px', '&:hover': { backgroundColor: '#5f6368' } }}>
+                                <BackHandIcon/>
+                            </IconButton>
                             <IconButton onClick={handleScreen} sx={{ backgroundColor: '#3c4043', color: 'white', padding: '12px', '&:hover': { backgroundColor: '#5f6368' } }}>
                                 {screen ? <ScreenShareIcon /> : <StopScreenShareIcon />}
                             </IconButton>
-                           
-                            <IconButton onClick={handleEndCall} sx={{ backgroundColor: '#ea4335', color: 'white', padding: '12px', margin: '0 10px', '&:hover': { backgroundColor: '#d93025' } }}>
+                            <div style={{ position: 'relative' }}>
+                                {showEmojiPicker && (
+                                    <div style={{
+                                        position: 'absolute',
+                                        bottom: '60px',
+                                        left: '50%',
+                                        transform: 'translateX(-50%)',
+                                        backgroundColor: '#202124',
+                                        borderRadius: '24px',
+                                        padding: '12px 16px',
+                                        display: 'flex',
+                                        gap: '12px',
+                                        boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
+                                        zIndex: 100
+                                    }}>
+                                        {['💖', '👍', '🎉', '😂', '😮', '😢', '🤔', '👎'].map(em => (
+                                            <span 
+                                                key={em} 
+                                                onClick={() => handleSendEmoji(em)} 
+                                                style={{ cursor: 'pointer', fontSize: '24px', transition: 'transform 0.1s' }}
+                                                onMouseOver={(e) => e.target.style.transform = 'scale(1.2)'}
+                                                onMouseOut={(e) => e.target.style.transform = 'scale(1)'}
+                                            >
+                                                {em}
+                                            </span>
+                                        ))}
+                                    </div>
+                                )}
+                                <IconButton 
+                                    onClick={() => setShowEmojiPicker(!showEmojiPicker)} 
+                                    sx={{ 
+                                        backgroundColor: showEmojiPicker ? '#8ab4f8' : '#3c4043', 
+                                        color: showEmojiPicker ? '#202124' : 'white', 
+                                        padding: '12px', 
+                                        '&:hover': { backgroundColor: showEmojiPicker ? '#aecbfa' : '#5f6368' } 
+                                    }}>
+                                    <TagFacesIcon/>
+                                </IconButton>
+                            </div>
+                            <IconButton onClick={handleEndCall} sx={{ backgroundColor: '#ea4335', color: 'white', padding: '12px',  '&:hover': { backgroundColor: '#d93025' } }}>
                                 <CallEndIcon />
                             </IconButton>
                             <Badge badgeContent={newMessages} max={99} color='error'>
@@ -1150,7 +1306,7 @@ export default function VideoMeetComponent(){
                     {showModal && (
                         <div className={styles.chatRoom}>
                             <div className={styles.chatHeader}>
-                                <h3 style={{ margin: 0, color: '#e8eaed', fontWeight: '500', fontSize: '18px' }}>In-call messages</h3>
+                                <h3 style={{ margin: 0, color: '#e8eaed', fontWeight: '500', fontSize: '30px' }}>In-call messages</h3>
                             </div>
                             <div className={styles.chattingDisplay}>
                                 {messages.length > 0 ? messages.map((item, index) => (
@@ -1172,8 +1328,8 @@ export default function VideoMeetComponent(){
                                         </div>
                                     </div>
                                 )) : (
-                                    <p style={{ textAlign: 'center', color: '#9aa0a6', marginTop: '20px', fontSize: '14px', lineHeight: '1.5' }}>
-                                        Messages will not be saved for meeting participants when the call ends.
+                                    <p style={{ color: '#9aa0a6',  fontSize: '16px', lineHeight: '1.5' , opacity: '70%' }}>
+                                        Messages will disappear after the end of this call.
                                     </p>
                                 )}
                             </div>
@@ -1197,7 +1353,7 @@ export default function VideoMeetComponent(){
                                 }}
                                 sx={{
                                     input: { color: '#e8eaed', fontSize: '14px' },
-                                    backgroundColor: '#3c4043',
+                                    backgroundColor: 'var(--Labels---Vibrant---Controls-Secondary, #727272)',
                                     marginRight: '2px',
                                     borderRadius: '24px',
                                     '& .MuiOutlinedInput-root': {
