@@ -1,5 +1,5 @@
 import './App.css';
-import {Route, BrowserRouter as Router, Routes} from 'react-router-dom';
+import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import VideoMeetComponent from './pages/VideoMeet';
 import LandingPage from './pages/landing';

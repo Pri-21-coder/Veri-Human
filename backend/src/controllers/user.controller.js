@@ -1,75 +1,164 @@
 import httpStatus from "http-status";
-import {User} from "../models/user.model.js";
+import { User } from "../models/user.model.js";
 import { Meeting } from "../models/meeting.model.js";
-import bcrypt, {hash} from "bcrypt";
-import crypto from "crypto";
-const login = async (req, res)=>{
-    const {username, password} = req.body;
-    // async handler
-    if(!username || !password){
-        return res.status(400).json({message: "Please Provide"})
+
+const syncUser = async (req, res) => {
+  try {
+    const supabaseUser = req.supabaseUser;
+    if (!supabaseUser) {
+      return res
+        .status(httpStatus.UNAUTHORIZED)
+        .json({ message: "User not authenticated" });
     }
-    try{
-        const user = await User.findOne({username});
-        if(!user){
-            return res.status(httpStatus.NOT_FOUND).json({message: "User Not Found"})
-        }
-        //return res.json(user);
-        let isPasswordCorrect = await bcrypt.compare(password, user.password)// return a promise
-        if(isPasswordCorrect){
-            let token = crypto.randomBytes(20).toString("hex");
-            user.token = token;
-            await user.save();
-            return res.status(httpStatus.OK).json({token: token})
-        } else{
-            // if password or username not matched
-            return res.status(httpStatus.UNAUTHORIZED).json({message: "Invalid Username or Password"})
-        }
-    } catch(e){
-        res.json({message: `Something went wrong ${e}`})
+
+    const { id: supabaseId, email } = supabaseUser;
+    const metadata = supabaseUser.user_metadata || {};
+    const appMetadata = supabaseUser.app_metadata || {};
+
+    const name = req.body.name || metadata.full_name || metadata.name || "";
+    const avatarUrl =
+      req.body.avatarUrl || metadata.avatar_url || metadata.picture || "";
+    const rawProvider = req.body.provider || appMetadata.provider || "google";
+    const providerName = rawProvider === "azure" ? "azure" : "google";
+    const providerId =
+      req.body.providerId ||
+      supabaseUser.identities?.[0]?.id ||
+      supabaseId;
+    const credentials = req.body.credentials;
+
+    let user = await User.findOne({ supabaseId });
+
+    if (!user && email) {
+      user = await User.findOne({ email: email.toLowerCase() });
     }
-}
-const register = async(req, res) =>{
-    const {name, username, password} = req.body;
-    try{
-        const existingUser = await User.findOne({ username});
-        if(existingUser){
-            return res.status(httpStatus.FOUND).json({message: "User already exists"});
-        }
-        const hashedPassword = await bcrypt.hash(password, 10);
-        const newUser = new User({
-            name: name,
-            username: username,
-            password: hashedPassword
-        });
-        await newUser.save();
-        res.status(httpStatus.CREATED).json({message: "User Registered"})
-    }catch(e){
-        res.json({message: `Something went wrong ${e}`})
+
+    const providerData = {
+      provider: providerName,
+      providerId: String(providerId),
+      lastLoginAt: new Date(),
+    };
+
+    if (user) {
+      user.supabaseId = supabaseId;
+      if (email) user.email = email.toLowerCase();
+      if (name) user.name = name;
+      if (avatarUrl) user.avatarUrl = avatarUrl;
+
+      const existingProviderIndex = user.providers.findIndex(
+        (p) => p.provider === providerData.provider
+      );
+
+      if (existingProviderIndex >= 0) {
+        user.providers[existingProviderIndex].lastLoginAt = new Date();
+        user.providers[existingProviderIndex].providerId = String(providerId);
+      } else {
+        user.providers.push(providerData);
+      }
+
+      if (credentials) {
+        user.credentials = credentials;
+      }
+
+      await user.save();
+    } else {
+      user = new User({
+        supabaseId,
+        email: email ? email.toLowerCase() : "",
+        name,
+        avatarUrl,
+        role: "user",
+        providers: [providerData],
+        ...(credentials && { credentials }),
+      });
+      await user.save();
     }
-}
-const getUserHistory = async(req, res)=>{
-    const {token} = req.query;
-    try {
-        const user = await User.findOne({token: token});
-        const meetings = await Meeting.find({user_id: user.username});
-        res.json(meetings);
-    } catch (e){
-        res.json({message: `Something went wrong ${e}`});
+
+    return res.status(httpStatus.OK).json({
+      message: "User synced successfully",
+      user,
+    });
+  } catch (error) {
+    return res
+      .status(httpStatus.INTERNAL_SERVER_ERROR)
+      .json({ message: `Sync failed: ${error.message}` });
+  }
+};
+
+const getUserHistory = async (req, res) => {
+  try {
+    const user =
+      req.user ||
+      (req.supabaseUser &&
+        (await User.findOne({ supabaseId: req.supabaseUser.id })));
+
+    if (!user) {
+      return res
+        .status(httpStatus.NOT_FOUND)
+        .json({ message: "User not found" });
     }
-}
-const addToHistory = async(req, res)=>{
-    const {token, meeting_code} = req.body;
-    try {
-        const user = await User.findOne({token: token});
-        const newMeeting = new Meeting({
-            user_id: user.username,
-            meetingCode: meeting_code
-        })
-        await newMeeting.save();
-        res.status(httpStatus.CREATED).json({message: "Added code to History"})
-    } catch(e) {
-        res.json({message: `Something went wrong ${e}`});
+
+    const meetings = await Meeting.find({
+      $or: [
+        { user_id: user.supabaseId },
+        { user_id: user.email },
+        { user_id: user.name },
+      ],
+    }).sort({ date: -1 });
+
+    return res.status(httpStatus.OK).json(meetings);
+  } catch (e) {
+    return res
+      .status(httpStatus.INTERNAL_SERVER_ERROR)
+      .json({ message: `Something went wrong: ${e.message}` });
+  }
+};
+
+const addToHistory = async (req, res) => {
+  const { meeting_code } = req.body;
+  if (!meeting_code) {
+    return res
+      .status(httpStatus.BAD_REQUEST)
+      .json({ message: "Meeting code is required" });
+  }
+
+  try {
+    const user =
+      req.user ||
+      (req.supabaseUser &&
+        (await User.findOne({ supabaseId: req.supabaseUser.id })));
+
+    if (!user) {
+      return res
+        .status(httpStatus.NOT_FOUND)
+        .json({ message: "User not found" });
     }
-}
-export {login, register, getUserHistory, addToHistory}
+
+    const newMeeting = new Meeting({
+      user_id: user.supabaseId,
+      meetingCode: meeting_code,
+    });
+
+    await newMeeting.save();
+    return res
+      .status(httpStatus.CREATED)
+      .json({ message: "Added code to History" });
+  } catch (e) {
+    return res
+      .status(httpStatus.INTERNAL_SERVER_ERROR)
+      .json({ message: `Something went wrong: ${e.message}` });
+  }
+};
+
+const login = async (req, res) => {
+  return res.status(httpStatus.BAD_REQUEST).json({
+    message: "Legacy login deprecated. Please authenticate through Supabase.",
+  });
+};
+
+const register = async (req, res) => {
+  return res.status(httpStatus.BAD_REQUEST).json({
+    message: "Legacy register deprecated. Please authenticate through Supabase.",
+  });
+};
+
+export { syncUser, getUserHistory, addToHistory, login, register };

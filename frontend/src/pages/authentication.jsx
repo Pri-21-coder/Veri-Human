@@ -15,7 +15,7 @@ export default function Authentication() {
     const [formState, setFormState] = React.useState(1);
     const [open, setOpen] = React.useState(false);
 
-    const { handleRegister, handleLogin } = React.useContext(AuthContext);
+    const { handleRegister, handleLogin, handleSocialLogin } = React.useContext(AuthContext);
 
     let handleAuth = async () => {
         try {
@@ -101,6 +101,13 @@ export default function Authentication() {
                                 className="authSocialBtn"
                                 title="Sign in with Google"
                                 aria-label="Sign in with Google"
+                                onClick={async () => {
+                                    try {
+                                        await handleSocialLogin("google");
+                                    } catch (err) {
+                                        setError(err?.message || "Google sign-in failed");
+                                    }
+                                }}
                             >
                                 <img src="/g-logo.svg" alt="Google" className="authSocialIcon" />
                             </button>
@@ -109,9 +116,17 @@ export default function Authentication() {
                                 className="authSocialBtn"
                                 title="Sign in with Microsoft / Outlook account"
                                 aria-label="Sign in with Microsoft / Outlook account"
+                                onClick={async () => {
+                                    try {
+                                        await handleSocialLogin("azure");
+                                    } catch (err) {
+                                        setError(err?.message || "Microsoft sign-in failed");
+                                    }
+                                }}
                             >
                                 <img src="/ms-outlook-logo.svg" alt="Microsoft Outlook" className="authSocialIcon" />
                             </button>
+
                         </div>
 
                         {/* Divider */}
