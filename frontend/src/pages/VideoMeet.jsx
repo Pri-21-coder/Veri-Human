@@ -1,4 +1,5 @@
-import React, { useEffect,useRef,useState } from 'react';
+import React, { useEffect, useRef, useState, useContext } from 'react';
+import { AuthContext } from '../contexts/AuthContext';
 import io from "socket.io-client";
 import SendIcon from '@mui/icons-material/Send';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
@@ -90,7 +91,23 @@ export default function VideoMeetComponent(){
     const [currentTime, setCurrentTime] = useState(new Date());
     useEffect(() => { currentVideoState.current = video; }, [video]);
     useEffect(() => { currentAudioState.current = audio; }, [audio]);
+    const { userData, handleLogout } = useContext(AuthContext);
     const router = useNavigate();
+
+    useEffect(() => {
+        if (userData) {
+            const displayName =
+                userData.user_metadata?.full_name ||
+                userData.user_metadata?.name ||
+                userData.name ||
+                userData.email?.split('@')[0] ||
+                "";
+            if (displayName && !username) {
+                setUsername(displayName);
+            }
+        }
+    }, [userData]);
+
     useEffect(()=>{
         getPermissions();
         // Pre-initialize face tracker when component mounts
@@ -852,12 +869,25 @@ export default function VideoMeetComponent(){
                             <span className={styles.meetLogoText}>Veri-Human</span>
                         </div>
                         <div className={styles.navProfile}>
-                            <p  className={styles.navLink} onClick={() =>{router("/auth")}}>
-                                Register
-                            </p>
-                            <div className={styles.navButton} onClick={() =>{router("/auth")}} role='button'>
-                                <p>Login</p>
-                            </div>
+                            {userData ? (
+                                <>
+                                    <p className={styles.navLink}>
+                                        {userData.user_metadata?.full_name || userData.email}
+                                    </p>
+                                    <div className={styles.navButton} onClick={handleLogout} role='button'>
+                                        <p>Logout</p>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <p className={styles.navLink} onClick={() => { router("/auth"); }}>
+                                        Register
+                                    </p>
+                                    <div className={styles.navButton} onClick={() => { router("/auth"); }} role='button'>
+                                        <p>Login</p>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     </div>
                     {/* Main Lobby Content */}
