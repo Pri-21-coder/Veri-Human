@@ -82,8 +82,13 @@ export const connectToSocket =(server) => {
             }
         });
         socket.on("send-emoji", (data) => {
-            // Assuming you have room logic, broadcast to the room
-            socket.broadcast.to(roomID).emit("receive-emoji", data);
+            const matchingRoom = Object.keys(connections).find(room => 
+                connections[room].includes(socket.id)
+            );
+            
+            if (matchingRoom) {
+                socket.broadcast.to(matchingRoom).emit("receive-emoji", data);
+            }
         });
         // chat message comes from client after press the enter
         socket.on("chat-message", (data,sender)=>{

@@ -160,5 +160,4 @@ const register = async (req, res) => {
     message: "Legacy register deprecated. Please authenticate through Supabase.",
   });
 };
-
-export { syncUser, getUserHistory, addToHistory, login, register };
+export { syncUser, getUserHistory, addToHistory, login, register };
