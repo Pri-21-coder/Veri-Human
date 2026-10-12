@@ -66,6 +66,25 @@ export const connectToSocket =(server) => {
                 });
             }
         });
+        socket.on("hand-status-change", (data) => {
+            const matchingRoom = Object.keys(connections).find(room => 
+                connections[room].includes(socket.id)
+            );
+            if (matchingRoom) {
+                connections[matchingRoom].forEach((peerId) => {
+                    if (peerId !== socket.id) {
+                        io.to(peerId).emit("hand-status-change", {
+                            socketId: socket.id,
+                            raised: data.raised
+                        });
+                    }
+                });
+            }
+        });
+        socket.on("send-emoji", (data) => {
+            // Assuming you have room logic, broadcast to the room
+            socket.broadcast.to(roomID).emit("receive-emoji", data);
+        });
         // chat message comes from client after press the enter
         socket.on("chat-message", (data,sender)=>{
             //find in which meeting room user are in
