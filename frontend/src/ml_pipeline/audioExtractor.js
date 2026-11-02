@@ -1,38 +1,43 @@
 import Meyda from "meyda";
-
 let audioContext = null;
-let sourceNode = null;
-let meydaAnalyzer = null;
-let isAudioReady = false;
-
-// match offline PyTorch training on ASVspoof 2019/2021 and FakeAVCeleb
+const activeAnalyzers = new Map();
 const SAMPLE_RATE = 16000;
 const BUFFER_SIZE = 512;
 const NUM_MFCC = 20;
-
-// Threshold for detecting sharp sounds ('P', 'B', 'M')
 const PLOSIVE_ENERGY_THRESHOLD = 5.0; 
 
-/** Initializes the Web Audio API and the Meyda DSP analyzer.
-** @param {MediaStream} mediaStream - The live microphone stream from WebRTC */
-export async function initializeAudioExtractor(mediaStream) {
-    if (isAudioReady) return;
-
+export async function initializeAudioExtractor(socketId, mediaStream) {
+    // Toggling cameras/mics can cause WebRTC to generate 
+    // a brand NEW MediaStream object. If we already have an analyzer running, 
+    // we must check if the stream reference changed.
+    if (activeAnalyzers.has(socketId)) {
+        const currentAudio = activeAnalyzers.get(socketId);
+        // If the stream is exactly the same, do nothing.
+        if (currentAudio.stream === mediaStream) {
+            return;
+        } else {
+            // Stream changed! The old stream is dead. Clean it up so we can attach the new one.
+            cleanupAudioExtractor(socketId);
+        }
+    }
     try {
-        //Force 16kHz sample rate to match offline datasets
-        const AudioContext = window.AudioContext || window.webkitAudioContext;
-        audioContext = new AudioContext({ sampleRate: SAMPLE_RATE });
-
+        if (!audioContext) {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            audioContext = new AudioContext({ sampleRate: SAMPLE_RATE });
+        }
         if (audioContext.state === "suspended") {
             await audioContext.resume();
         }
-
-        //Connect the live microphone feed
-        sourceNode = audioContext.createMediaStreamSource(mediaStream);
-
-        // Configure Meyda Analyzer
-        // We use numberOfMFCCCoefficients natively based on Meyda's API
-        meydaAnalyzer = Meyda.createMeydaAnalyzer({
+        const dummyAudioElement = new Audio();
+        dummyAudioElement.srcObject = mediaStream;
+        dummyAudioElement.muted = true;
+        dummyAudioElement.play().catch(e => console.warn("Dummy audio play failed:", e));
+        const sourceNode = audioContext.createMediaStreamSource(mediaStream);
+        const dummyGain = audioContext.createGain();
+        dummyGain.gain.value = 0;
+        sourceNode.connect(dummyGain);
+        dummyGain.connect(audioContext.destination);
+        const meydaAnalyzer = Meyda.createMeydaAnalyzer({
             audioContext: audioContext,
             source: sourceNode,
             bufferSize: BUFFER_SIZE,
@@ -40,53 +45,57 @@ export async function initializeAudioExtractor(mediaStream) {
             windowingFunction: "hamming",
             numberOfMFCCCoefficients: NUM_MFCC 
         });
-
-        meydaAnalyzer.start();
-        isAudioReady = true;
-        console.log("[Veri-Human] Audio Extractor initialized successfully at 16kHz.");
-    } catch (error) {
-        console.error("[Veri-Human] Failed to initialize Audio Extractor:", error);
+        meydaAnalyzer.start();     
+        // Store the mediaStream reference so we can check if it changes later
+        activeAnalyzers.set(socketId, { meydaAnalyzer, sourceNode, dummyGain, dummyAudioElement, stream: mediaStream }); 
+        console.log(`[Veri-Human] Audio Extractor initialized for ${socketId}`);
+    } 
+    catch (error) {
+        console.error(`[Veri-Human] Audio Extractor failed for ${socketId}:`, error);
     }
 }
 
-/** Extracts the acoustic footprint from the current audio buffer. Call this inside your requestAnimationFrame loop.
- @returns {Object|null} { mfccArray, energy, isPlosiveSpike, timestamp } */
-export function extractAudioFeatures() {
-    if (!isAudioReady || !meydaAnalyzer) return null;
-
-    // Pull the latest calculations from Meyda
-    const features = meydaAnalyzer.get();
+export function extractAudioFeatures(socketId) {
+    const userAudio = activeAnalyzers.get(socketId);
+    if (!userAudio || !userAudio.meydaAnalyzer) return null;
+    const features = userAudio.meydaAnalyzer.get();
     if (!features || !features.mfcc) return null;
-
-    // Convert the Float32Array to a standard JS Array
-    // Because we set numberOfMFCCCoefficients to 20, this is guaranteed to be the right size
-    const mfccArray = Array.from(features.mfcc);
-    
-    // Detect if the current sound represents a plosive spike
-    const isPlosiveSpike = features.energy > PLOSIVE_ENERGY_THRESHOLD;
-
     return {
-        mfccArray,
+        mfccArray: Array.from(features.mfcc),
         energy: features.energy,
-        isPlosiveSpike,
+        isPlosiveSpike: features.energy > PLOSIVE_ENERGY_THRESHOLD,
         timestamp: performance.now()
     };
 }
 
-/* Safely stops the DSP analyzer and closes the audio context. Call this when the video call ends to free up browser memory.*/
-export function cleanupAudioExtractor() {
-    if (meydaAnalyzer) {
-        meydaAnalyzer.stop();
-        meydaAnalyzer = null;
+export function cleanupAudioExtractor(socketId = null) {
+    if (socketId) {
+        const userAudio = activeAnalyzers.get(socketId);
+        if (userAudio) {
+            userAudio.meydaAnalyzer.stop();
+            userAudio.sourceNode.disconnect();
+            if (userAudio.dummyGain) userAudio.dummyGain.disconnect();
+            if (userAudio.dummyAudioElement) {
+                userAudio.dummyAudioElement.pause();
+                userAudio.dummyAudioElement.srcObject = null;
+            }
+            activeAnalyzers.delete(socketId);
+        }
+    } else {
+        activeAnalyzers.forEach(({ meydaAnalyzer, sourceNode, dummyGain, dummyAudioElement }) => {
+            meydaAnalyzer.stop();
+            sourceNode.disconnect();
+            if (dummyGain) dummyGain.disconnect();
+            if (dummyAudioElement) {
+                dummyAudioElement.pause();
+                dummyAudioElement.srcObject = null;
+            }
+        });
+        activeAnalyzers.clear();
+        
+        if (audioContext && audioContext.state !== "closed") {
+            audioContext.close();
+            audioContext = null;
+        }
     }
-    if (sourceNode) {
-        sourceNode.disconnect();
-        sourceNode = null;
-    }
-    if (audioContext && audioContext.state !== "closed") {
-        audioContext.close();
-        audioContext = null;
-    }
-    isAudioReady = false;
-    console.log("[Veri-Human] Audio Extractor cleaned up and memory freed.");
 }

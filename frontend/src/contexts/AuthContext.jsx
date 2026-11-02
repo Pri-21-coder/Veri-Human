@@ -53,7 +53,7 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem("token", session.access_token);
         setUserData(session.user);
         await syncWithBackend(session.access_token);
-        if (event === "SIGNED_IN" || window.location.pathname === "/auth") {
+        if (window.location.pathname === "/auth" ) {
           router("/home");
         }
       } else {
