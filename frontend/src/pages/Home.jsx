@@ -2,10 +2,10 @@ import React, { useContext, useState } from 'react'
 import withAuth from "../utils/withAuth";
 import { useNavigate } from "react-router-dom";
 import "../App.css";
-import { Button, IconButton, TextField } from '@mui/material';
-import VideocamIcon from '@mui/icons-material/Videocam';
-import RestoreIcon from '@mui/icons-material/Restore';
+import { Button, InputAdornment, TextField } from '@mui/material';
+import KeyboardIcon from '@mui/icons-material/Keyboard';
 import { AuthContext } from "../contexts/AuthContext";
+import "../styles/home.css"
 
 //this component not accesible by everyone Authenticate user can access this
 function HomeComponent(){
@@ -18,41 +18,51 @@ function HomeComponent(){
     }
     return (
         <>
+        <div className='Page'>
         <div className="navBar">
-            <div style={{display: "flex",alignItems: "center"}}>
-                <VideocamIcon style={{ color: '#1a73e8', fontSize: '28px', marginRight: '8px' }} />
-                <h2>Meetify</h2>
+            <div className='navbarLogo'>
+                <img src="/logo.png" alt="VeriHuman logo" />
+                <h2>Veri-Human</h2>
             </div>
-            <div style={{display: "flex", alignItem: "center"}}>
-                <IconButton onClick={
+            <div className='navbarList'>
+                <p onClick={
                     ()=>{
                         navigate("/history")
                     }
-                }>
-                    <RestoreIcon/>
-                </IconButton>
-                <p>History</p>
-                <Button onClick={()=>{
+                }>History</p>
+                <p onClick={()=>{
                     localStorage.removeItem("token")
                     navigate("/auth")
                 }}>
                     Logout
-                </Button>
+                </p>
             </div>
         </div>
         <div className="meetContainer">
             <div className="leftPanel">
                 <div>
-                    <h2>Providing Quality Video Call Just Like Quality Education</h2>
-                    <div style={{display: 'flex', gap: "10px"}}>
-                        <TextField onChange={e => setMeetingCode(e.target.value)} id="outlined-basic" label="Meeting Code" variant="outlined"/>
+                    <div><h2>Bring people together. Let ideas take shape. Step in. Connect. Make it happen.</h2></div>
+                    <div className='join'>
+                        <TextField
+                            onChange={e => setMeetingCode(e.target.value)}
+                            placeholder="Meeting Code"
+                            variant="outlined"
+                            InputProps={{
+                                startAornment: (
+                                    <InputAdornment position="start">
+                                        <KeyboardIcon />
+                                    </InputAdornment>
+                                ),
+                            }}
+                        />
                         <Button onClick={handleJoinVideoCall} variant='contained'>Join</Button>
                     </div>
                 </div>
             </div>
             <div className="rightPanel">
-                <img srcSet="/logo1.png" alt="" />
+                <img srcSet="/home.svg" alt="" />
             </div>
+        </div>
         </div>
         </>
     )
