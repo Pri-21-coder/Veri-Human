@@ -29,7 +29,7 @@ export const connectToSocket = (server) => {
                 waitingRooms[path] = [];
             }
             if (roomSettings[path] === undefined) {
-                roomSettings[path] = { allowMic: true, allowVideo: true, allowScreen: true, allowChat: true };
+                roomSettings[path] = { allowMic: true, allowVideo: true, allowScreen: true, allowChat: true,  allowScreenshots: true};
             }
             userNames[socket.id] = username;
             timeOnline[socket.id] = new Date();
@@ -182,6 +182,12 @@ export const connectToSocket = (server) => {
                 connections[matchingRoom].forEach((elem) => {
                     io.to(elem).emit("chat-message", data, sender, socket.id);
                 });
+            }
+        });
+        socket.on("update-screenshot-protection", (path, isProtected) => {
+            if (roomHosts[path] === socket.id) {
+                roomSettings[path].allowScreenshots = !isProtected;
+                socket.broadcast.to(path).emit("screenshot-protection-updated", isProtected);
             }
         });
         socket.on("disconnect", () => {

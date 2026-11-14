@@ -109,6 +109,10 @@ export default function VideoMeetComponent(){
     const [currentTime, setCurrentTime] = useState(new Date());
     useEffect(() => { currentVideoState.current = video; }, [video]);
     useEffect(() => { currentAudioState.current = audio; }, [audio]);
+    let currentScreenState = useRef(screen);
+    useEffect(() => { currentScreenState.current = screen; }, [screen]);
+    //add
+    let [isScreenshotProtected, setIsScreenshotProtected] = useState(false);
     const { userData, handleLogout } = useContext(AuthContext);
     const router = useNavigate();
     const roomPath = window.location.pathname.replace(/\/$/, '');
@@ -321,9 +325,25 @@ export default function VideoMeetComponent(){
             socketRef.current.on("admitted", (settings) => {
                 setHostSettings(settings);
                 setMeetingState("joined"); 
-                if (!settings.allowMic && currentAudioState.current) handleAudio();
-                if (!settings.allowVideo && currentVideoState.current) handleVideo();
-                if (!settings.allowScreen && screen) handleScreen();
+                if (!settings.allowMic && currentAudioState.current) {
+                    setAudio(false);
+                    handleToggle('audio', false);
+                }
+                if (!settings.allowVideo && currentVideoState.current) {
+                    setVideo(false);
+                    handleToggle('video', false);
+                }
+                if (!settings.allowScreen && currentScreenState.current) {
+                    if (window.localStream) {
+                        let screenTrack = window.localStream.getVideoTracks().find(t => 
+                            t.label.toLowerCase().includes('screen') || t.label.toLowerCase().includes('display')
+                        );
+                        if (screenTrack) {
+                            screenTrack.stop();
+                            screenTrack.dispatchEvent(new Event('ended'));
+                        }
+                    }
+                }
             });
             socketRef.current.on("denied", () => {
                 setMeetingState("denied");
@@ -334,9 +354,25 @@ export default function VideoMeetComponent(){
             });
             socketRef.current.on("host-settings-updated", (newSettings) => {
                 setHostSettings(newSettings);
-                if (!newSettings.allowMic && audio) handleAudio();
-                if (!newSettings.allowVideo && video) handleVideo();
-                if (!newSettings.allowScreen && screen) handleScreen();
+                if (!newSettings.allowMic && currentAudioState.current) {
+                    setAudio(false);
+                    handleToggle('audio', false);
+                }
+                if (!newSettings.allowVideo && currentVideoState.current) {
+                    setVideo(false);
+                    handleToggle('video', false);
+                }
+                if (!newSettings.allowScreen && currentScreenState.current) {
+                    if (window.localStream) {
+                        let screenTrack = window.localStream.getVideoTracks().find(t => 
+                            t.label.toLowerCase().includes('screen') || t.label.toLowerCase().includes('display')
+                        );
+                        if (screenTrack) {
+                            screenTrack.stop();
+                            screenTrack.dispatchEvent(new Event('ended'));
+                        }
+                    }
+                }
             });
             socketRef.current.on("meeting-ended-by-host", () => {
                 alert("The host has ended the meeting for everyone.");
@@ -352,14 +388,28 @@ export default function VideoMeetComponent(){
             });           
             socketRef.current.on("screen-share-lock-updated", (locked) => {
                 setIsScreenShareLocked(locked);
-                if (locked && screen) {
+                if (locked && currentScreenState.current) {
                     if (window.localStream) {
-                        let screenTrack = window.localStream.getVideoTracks().find(t => t.label.toLowerCase().includes('screen') || t.label.toLowerCase().includes('display'));
+                        let screenTrack = window.localStream.getVideoTracks().find(t => 
+                            t.label.toLowerCase().includes('screen') || t.label.toLowerCase().includes('display')
+                        );
                         if (screenTrack) {
                             screenTrack.stop();
                             screenTrack.dispatchEvent(new Event('ended'));
                         }
                     }
+                }
+            });
+            //add
+            // Listen for the host toggling OS screenshot protection
+            socketRef.current.on("screenshot-protection-updated", (isProtected) => {
+                setIsScreenshotProtected(isProtected);
+                
+                // If running inside the Electron app, command the OS to black out the window
+                if (window.electronAPI) {
+                    window.electronAPI.setContentProtection(isProtected);
+                } else {
+                    console.warn("Screenshot protection requires the Veri-Human Desktop Client.");
                 }
             });
             socketRef.current.on("chat-message", addMessage)           
@@ -802,21 +852,23 @@ export default function VideoMeetComponent(){
                     </div>
                 </div>
             ) : meetingState === "waiting" || meetingState === "connecting" ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', color: 'white' }}>
-                    <img src="/waiting-illustration.png" alt="Waiting" style={{ width: '300px', marginBottom: '20px' }} />
-                    <h2>Connecting...</h2>
-                    <p>Please wait until a meeting host brings you into the call</p>
+                <div className={styles.waitingScreenContainer}>
+                    <div className={styles.waitingScreenCard}>
+                        <div className={styles.waitingSpinner}></div>
+                        <h2 style={{ margin: '10px 0', fontSize: '28px', fontWeight: '500' }}>Connecting...</h2>
+                        <p style={{ margin: 0, fontSize: '16px', opacity: 0.9 }}>Please wait until the meeting host brings you into the call.</p>
+                    </div>
                 </div>
             ) : meetingState === "denied" ? (
                 <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: 'white' }}>
                     <h2>The host denied your entry.</h2>
                 </div>
             ) : (
-                <div className={styles.mainMeetingArea}ref={meetingWrapperRef} id="meeting-wrapper">
+                <div className={styles.mainMeetingArea} ref={meetingWrapperRef} id="meeting-wrapper">
                     
                     <div className={styles.floatingEmojiContainer}>
                         {floatingEmojis.map((item) => (
-                            <div key={item.id} className={styles.floatingEmojiWrapper}>
+                            <div key={item.id} className={styles.floatingEmojiWrapper} style={{ left: item.leftOffset }}>
                                 <div style={{ fontSize: '48px' }}>{item.emoji}</div>
                                 <div className={styles.nameLabel} style={{ backgroundColor: 'rgba(0,0,0,0.6)', color: 'white', padding: '4px 10px', borderRadius: '12px', fontSize: '12px', marginTop: '4px', whiteSpace: 'nowrap', fontWeight: 'bold' }}>{item.senderName}</div>
                             </div>
@@ -830,12 +882,25 @@ export default function VideoMeetComponent(){
                     </div>
 
                     <div style={{ position: 'absolute', top: '24px', right: '24px', display: 'flex', gap: '16px', zIndex: 100 }}>
-                        <IconButton onClick={() => setSidebarTab(sidebarTab === 'people' ? 'none' : 'people')} sx={{ color: 'white', backgroundColor: '#3c4043' }}>
-                            <Badge badgeContent={videos.length + 1} color="primary"><PeopleIcon /></Badge>
+                        
+                        <IconButton onClick={() => { 
+                            const newState = sidebarTab === 'people' ? 'none' : 'people';
+                            setSidebarTab(newState);
+                            if(newState !== 'none') setModal(false);
+                        }} sx={{ color: 'white', backgroundColor: sidebarTab === 'people' ? '#8ab4f8' : '#3c4043' }}>
+                            <Badge badgeContent={videos.length + 1} color="primary">
+                                <PeopleIcon sx={{ color: sidebarTab === 'people' ? '#202124' : 'inherit' }}/>
+                            </Badge>
                         </IconButton>
+                        
                         {isHost && (
-                            <IconButton onClick={() => setSidebarTab(sidebarTab === 'controls' ? 'none' : 'controls')} sx={{ color: 'white', backgroundColor: '#3c4043' }}>
-                                <AdminPanelSettingsIcon />
+                           
+                            <IconButton onClick={() => {
+                                const newState = sidebarTab === 'controls' ? 'none' : 'controls';
+                                setSidebarTab(newState);
+                                if(newState !== 'none') setModal(false);
+                            }} sx={{ color: 'white', backgroundColor: sidebarTab === 'controls' ? '#8ab4f8' : '#3c4043' }}>
+                                <AdminPanelSettingsIcon sx={{ color: sidebarTab === 'controls' ? '#202124' : 'inherit' }}/>
                             </IconButton>
                         )}
                     </div>
@@ -925,10 +990,10 @@ export default function VideoMeetComponent(){
                         </div>
                         
                         <div className={styles.buttonContainers}>
-                            <IconButton onClick={handleAudio} disabled={isMicDisabled} sx={{ backgroundColor: audio ? '#3c4043' : '#FF383C', color: 'white', padding: '12px', opacity: isMicDisabled ? 0.5 : 1, '&:hover': { backgroundColor: audio ? '#5f6368' : '#c44143' } }}>{audio ? <MicIcon /> : <MicOffIcon />}</IconButton>
-                            <IconButton onClick={handleVideo} disabled={isVideoDisabled} sx={{ backgroundColor: video ? '#3c4043' : '#FF383C', color: 'white', padding: '12px', opacity: isVideoDisabled ? 0.5 : 1, '&:hover': { backgroundColor: video ? '#5f6368' : '#c44143' } }}>{video ? <VideocamIcon /> : <VideocamOffIcon />}</IconButton>
+                            <IconButton onClick={handleAudio} disabled={isMicDisabled} sx={{ backgroundColor: audio ? '#3c4043' : '#FF383C', color: 'white', padding: '12px', opacity: isMicDisabled ? 0.5 : 1, '&:hover': { backgroundColor: audio ? '#5f6368' : '#c44143' }, '&.Mui-disabled': { backgroundColor: audio ? '#3c4043' : '#FF383C', color: 'white' } }}>{audio ? <MicIcon /> : <MicOffIcon />}</IconButton>
+                            <IconButton onClick={handleVideo} disabled={isVideoDisabled} sx={{ backgroundColor: video ? '#3c4043' : '#FF383C', color: 'white', padding: '12px', opacity: isVideoDisabled ? 0.5 : 1, '&:hover': { backgroundColor: video ? '#5f6368' : '#c44143' }, '&.Mui-disabled': { backgroundColor: video ? '#3c4043' : '#FF383C', color: 'white' }}}>{video ? <VideocamIcon /> : <VideocamOffIcon />}</IconButton>
                             <IconButton onClick={handleRaiseHand} sx={{ backgroundColor: '#3c4043', color: 'white', padding: '12px', '&:hover': { backgroundColor: '#5f6368' } }}><BackHandIcon /></IconButton>
-                            <IconButton onClick={handleScreen} disabled={isScreenDisabled} sx={{ backgroundColor: '#3c4043', color: 'white', padding: '12px', opacity: isScreenDisabled ? 0.5 : 1, '&:hover': { backgroundColor: '#5f6368' } }}>{screen ? <ScreenShareIcon /> : <StopScreenShareIcon />}</IconButton>
+                            <IconButton onClick={handleScreen} disabled={isScreenDisabled} sx={{ backgroundColor: '#3c4043', color: 'white', padding: '12px', opacity: isScreenDisabled ? 0.5 : 1, '&:hover': { backgroundColor: '#5f6368' }, '&.Mui-disabled': { backgroundColor: '#3c4043', color: 'white' }}}>{screen ? <ScreenShareIcon /> : <StopScreenShareIcon />}</IconButton>
                             <div style={{ position: 'relative' }}>
                                 {showEmojiPicker && (
                                     <div style={{
@@ -971,7 +1036,7 @@ export default function VideoMeetComponent(){
                             <IconButton onClick={handleEndCall} sx={{ backgroundColor: '#ea4335', color: 'white', padding: '12px', '&:hover': { backgroundColor: '#d93025' } }}><CallEndIcon /></IconButton>
                             
                             <Badge badgeContent={newMessages} max={99} color='error'>
-                                <IconButton
+                               <IconButton
                                     onClick={() => {
                                         setModal(!showModal);
                                         if(!showModal) setNewMessages(0); 
@@ -982,7 +1047,6 @@ export default function VideoMeetComponent(){
                             </Badge>
                         </div>
                     </div>
-                    
                     {showModal && (
                         <div className={styles.chatRoom}>
                             <div className={styles.chatHeader}>
@@ -1045,57 +1109,108 @@ export default function VideoMeetComponent(){
                             </div>
                         </div>
                     )}
-                    
-                    <Drawer anchor="right" open={sidebarTab !== 'none'} onClose={() => setSidebarTab('none')} PaperProps={{ sx: { width: 360, backgroundColor: '#202124', color: 'white', marginTop: '80px', borderRadius: '16px 0 0 16px' } }}>
+                   
+                        
+                    <div className={styles.sidePanelContainer}>
+                        {/* PEOPLE PANEL (REPLACED DRAWER) */}
                         {sidebarTab === 'people' && (
-                            <div style={{ padding: '20px' }}>
-                                <h3>People</h3>
-                                {isHost && waitingUsers.length > 0 && (
-                                    <>
-                                        <h4 style={{ color: '#8ab4f8' }}>Waiting to join ({waitingUsers.length})</h4>
-                                        {waitingUsers.map(user => (
-                                            <div key={user.socketId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#3c4043', padding: '10px', borderRadius: '8px', marginBottom: '8px' }}>
-                                                <span>{user.username}</span>
-                                                <div>
-                                                    <Button onClick={() => socketRef.current.emit('deny-user', roomPath, user.socketId)} color="error">Deny</Button>
-                                                    <Button onClick={() => socketRef.current.emit('admit-user', roomPath, user.socketId)} color="primary" variant="contained">Admit</Button>
+                            <div className={styles.chatRoom}>
+                                <div className={styles.chatHeader}>
+                                    <h3 style={{ margin: 0, color: '#e8eaed', fontWeight: '500', fontSize: '30px' }}>People</h3>
+                                </div>
+                                <div className={styles.chattingDisplay} style={{ padding: '20px', gap: '8px' }}>
+                                    {isHost && waitingUsers.length > 0 && (
+                                        <div style={{ marginBottom: '16px' }}>
+                                            <h4 style={{ color: '#8ab4f8', marginTop: 0, marginBottom: '12px', fontSize: '16px', fontWeight: '500' }}>Waiting to join ({waitingUsers.length})</h4>
+                                            {waitingUsers.map(user => (
+                                                <div key={user.socketId} className={styles.waitingUserCard}>
+                                                    <span style={{ fontWeight: '500', color: '#e8eaed', fontSize: '15px' }}>{user.username}</span>
+                                                    <div className={styles.actionButtons}>
+                                                        <Button onClick={() => socketRef.current.emit('deny-user', roomPath, user.socketId)} sx={{ color: '#ff6b6b', fontWeight: '600', textTransform: 'none', padding: '4px 12px' }}>Deny</Button>
+                                                        <Button onClick={() => socketRef.current.emit('admit-user', roomPath, user.socketId)} variant="contained" sx={{ backgroundColor: '#8ab4f8', color: '#202124', fontWeight: '600', borderRadius: '16px', textTransform: 'none', padding: '4px 16px', '&:hover': { backgroundColor: '#aecbfa' }, boxShadow: 'none' }}>Admit</Button>
+                                                    </div>
                                                 </div>
+                                            ))}
+                                            <Divider sx={{ my: 2, borderColor: 'rgba(255,255,255,0.1)' }} />
+                                        </div>
+                                    )}
+                                    
+                                    <h4 style={{ color: '#e8eaed', marginTop: 0, marginBottom: '12px', fontSize: '16px', fontWeight: '500' }}>In the meeting</h4>
+                                    <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
+                                        <div className={styles.chatAvatar} style={{ backgroundColor: getAvatarColor(username || "Guest"), marginRight: '12px', width: '36px', height: '36px', fontSize: '16px' }}>
+                                            {getInitial(username || "Guest")}
+                                        </div>
+                                        <span style={{ color: '#e8eaed', fontWeight: '500', fontSize: '15px' }}>{username || "Guest"} (You)</span>
+                                    </div>
+                                    {videos.map(v => (
+                                        <div key={v.socketId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', width: '100%' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center' }}>
+                                                <div className={styles.chatAvatar} style={{ backgroundColor: getAvatarColor(v.username || "Guest"), marginRight: '12px', width: '36px', height: '36px', fontSize: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', color: 'white', borderRadius: '50%' }}>
+                                                    {getInitial(v.username || "Guest")}
+                                                </div>
+                                                <span style={{ color: '#e8eaed', fontWeight: '500', fontSize: '15px' }}>{v.username || "Guest"}</span>
                                             </div>
-                                        ))}
-                                        <Divider sx={{ my: 2, borderColor: '#5f6368' }} />
-                                    </>
-                                )}
-                                <h4>In the meeting</h4>
-                                <List>
-                                    <ListItem><ListItemText primary={`${username || "Guest"} (You)`} /></ListItem>
-                                    {videos.map(v => (<ListItem key={v.socketId}><ListItemText primary={v.username || "Guest"} /></ListItem>))}
-                                </List>
+                                            {isHost && (
+                                                <Button 
+                                                    onClick={() => socketRef.current.emit('kick-user', v.socketId)}
+                                                    sx={{ color: '#ff6b6b', textTransform: 'none', minWidth: 'auto', padding: '4px 8px', fontWeight: '600', fontSize: '13px', '&:hover': { backgroundColor: 'rgba(255, 107, 107, 0.1)' } }}
+                                                >
+                                                    Remove
+                                                </Button>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         )}
+
+                        {/* HOST CONTROLS PANEL (REPLACED DRAWER) */}
                         {sidebarTab === 'controls' && isHost && (
-                            <div style={{ padding: '20px' }}>
-                                <h3>Host controls</h3>
-                                <p style={{ fontSize: '14px', color: '#9aa0a6' }}>Use these host settings to keep control of your meeting.</p>
-                                <Divider sx={{ my: 2, borderColor: '#5f6368' }} />
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span>Turn on their microphone</span>
-                                    <Switch checked={hostSettings.allowMic} onChange={(e) => { const s = { ...hostSettings, allowMic: e.target.checked }; setHostSettings(s); socketRef.current.emit("update-host-settings", roomPath, s); }} />
+                            <div className={styles.chatRoom}>
+                                <div className={styles.chatHeader}>
+                                    <h3 style={{ margin: 0, color: '#e8eaed', fontWeight: '500', fontSize: '30px' }}>Host controls</h3>
                                 </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px' }}>
-                                    <span>Turn on their video</span>
-                                    <Switch checked={hostSettings.allowVideo} onChange={(e) => { const s = { ...hostSettings, allowVideo: e.target.checked }; setHostSettings(s); socketRef.current.emit("update-host-settings", roomPath, s); }} />
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px' }}>
-                                    <span>Share their screen</span>
-                                    <Switch checked={hostSettings.allowScreen} onChange={(e) => { const s = { ...hostSettings, allowScreen: e.target.checked }; setHostSettings(s); socketRef.current.emit("update-host-settings", roomPath, s); }} />
-                                </div>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px' }}>
-                                    <span>Send chat messages</span>
-                                    <Switch checked={hostSettings.allowChat} onChange={(e) => { const s = { ...hostSettings, allowChat: e.target.checked }; setHostSettings(s); socketRef.current.emit("update-host-settings", roomPath, s); }} />
+                                <div className={styles.chattingDisplay} style={{ padding: '8px' }}>
+                                    <p style={{ fontSize: '14px', color: '#9aa0a6', marginTop: 0, lineHeight: '1.5' }}>Use these host settings to keep control of your meeting.</p>
+                                    <Divider sx={{ my: 2, borderColor: 'rgba(255,255,255,0.1)' }} />
+                                    
+                                    <div className={styles.hostControlItem}>
+                                        <span style={{ color: '#e8eaed', fontWeight: '500', fontSize: '15px' }}>Turn on their microphone</span>
+                                        <Switch checked={hostSettings.allowMic} onChange={(e) => { const s = { ...hostSettings, allowMic: e.target.checked }; setHostSettings(s); socketRef.current.emit("update-host-settings", roomPath, s); }} sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#8ab4f8' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#8ab4f8' } }} />
+                                    </div>
+                                    <div className={styles.hostControlItem}>
+                                        <span style={{ color: '#e8eaed', fontWeight: '500', fontSize: '15px' }}>Turn on their video</span>
+                                        <Switch checked={hostSettings.allowVideo} onChange={(e) => { const s = { ...hostSettings, allowVideo: e.target.checked }; setHostSettings(s); socketRef.current.emit("update-host-settings", roomPath, s); }} sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#8ab4f8' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#8ab4f8' } }} />
+                                    </div>
+                                    <div className={styles.hostControlItem}>
+                                        <span style={{ color: '#e8eaed', fontWeight: '500', fontSize: '15px' }}>Share their screen</span>
+                                        <Switch checked={hostSettings.allowScreen} onChange={(e) => { const s = { ...hostSettings, allowScreen: e.target.checked }; setHostSettings(s); socketRef.current.emit("update-host-settings", roomPath, s); }} sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#8ab4f8' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#8ab4f8' } }} />
+                                    </div>
+                                    <div className={styles.hostControlItem}>
+                                        <span style={{ color: '#e8eaed', fontWeight: '500', fontSize: '15px' }}>Send chat messages</span>
+                                        <Switch checked={hostSettings.allowChat} onChange={(e) => { const s = { ...hostSettings, allowChat: e.target.checked }; setHostSettings(s); socketRef.current.emit("update-host-settings", roomPath, s); }} sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#8ab4f8' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#8ab4f8' } }} />
+                                    </div>
+                                    <div className={styles.hostControlItem}>
+                                        <span style={{ color: '#e8eaed', fontWeight: '500', fontSize: '15px' }}>Block OS screenshots & recording</span>
+                                        <Switch 
+                                            checked={isScreenshotProtected} 
+                                            onChange={(e) => { 
+                                                const isProtected = e.target.checked;
+                                                setIsScreenshotProtected(isProtected); 
+                                                socketRef.current.emit("update-screenshot-protection", roomPath, isProtected); 
+            
+                                                 // The host's own window should also be protected
+                                                if (window.electronAPI) {
+                                                    window.electronAPI.setContentProtection(isProtected);
+                                                }
+                                            }} 
+                                            sx={{ '& .MuiSwitch-switchBase.Mui-checked': { color: '#8ab4f8' }, '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': { backgroundColor: '#8ab4f8' } }} 
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         )}
-                    </Drawer>
+                    </div>
 
                     <Dialog open={showEndCallDialog} onClose={() => setShowEndCallDialog(false)} PaperProps={{ sx: { borderRadius: '8px', padding: '10px', maxWidth: '400px' } }}>
                         <DialogTitle sx={{ fontWeight: '500', fontSize: '1.2rem', color: '#202124' }}>End the call or just leave?</DialogTitle>
