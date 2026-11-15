@@ -34,23 +34,23 @@ const peerConfigConnections = {
         { urls: "stun:stun1.l.google.com:19302" },
         {
             urls: "turn:global.relay.metered.ca:80",
-            username: process.env.REACT_APP_TURN_USERNAME,
-            credential: process.env.REACT_APP_TURN_CREDENTIAL,
+            username: "PASTE_YOUR_METERED_USERNAME_HERE",
+            credential: "PASTE_YOUR_METERED_PASSWORD_HERE",
         },
         {
             urls: "turn:global.relay.metered.ca:80?transport=tcp",
-            username: process.env.REACT_APP_TURN_USERNAME,
-            credential: process.env.REACT_APP_TURN_CREDENTIAL,
+            username: "PASTE_YOUR_METERED_USERNAME_HERE",
+            credential: "PASTE_YOUR_METERED_PASSWORD_HERE",
         },
         {
             urls: "turn:global.relay.metered.ca:443",
-            username: process.env.REACT_APP_TURN_USERNAME,
-            credential: process.env.REACT_APP_TURN_CREDENTIAL,
+            username: "PASTE_YOUR_METERED_USERNAME_HERE",
+            credential: "PASTE_YOUR_METERED_PASSWORD_HERE",
         },
         {
             urls: "turns:global.relay.metered.ca:443?transport=tcp",
-            username: process.env.REACT_APP_TURN_USERNAME,
-            credential: process.env.REACT_APP_TURN_CREDENTIAL,
+            username: "PASTE_YOUR_METERED_USERNAME_HERE",
+            credential: "PASTE_YOUR_METERED_PASSWORD_HERE",
         },
     ]
 };
