@@ -30,30 +30,29 @@ const server_url = server;
 var connections = {};
 const peerConfigConnections = {
     "iceServers": [
-        { urls: "stun:stun.l.google.com:19302" },
-        { urls: "stun:stun1.l.google.com:19302" },
+        {"urls": "stun:stun.l.google.com:19302"},
         {
             urls: "turn:global.relay.metered.ca:80",
-            username: "PASTE_YOUR_METERED_USERNAME_HERE",
-            credential: "PASTE_YOUR_METERED_PASSWORD_HERE",
+            username: process.env.REACT_APP_TURN_USERNAME,
+            credential: process.env.REACT_APP_TURN_CREDENTIAL,
         },
         {
             urls: "turn:global.relay.metered.ca:80?transport=tcp",
-            username: "PASTE_YOUR_METERED_USERNAME_HERE",
-            credential: "PASTE_YOUR_METERED_PASSWORD_HERE",
+            username: process.env.REACT_APP_TURN_USERNAME,
+            credential: process.env.REACT_APP_TURN_CREDENTIAL,
         },
         {
             urls: "turn:global.relay.metered.ca:443",
-            username: "PASTE_YOUR_METERED_USERNAME_HERE",
-            credential: "PASTE_YOUR_METERED_PASSWORD_HERE",
+            username: process.env.REACT_APP_TURN_USERNAME,
+            credential: process.env.REACT_APP_TURN_CREDENTIAL,
         },
         {
             urls: "turns:global.relay.metered.ca:443?transport=tcp",
-            username: "PASTE_YOUR_METERED_USERNAME_HERE",
-            credential: "PASTE_YOUR_METERED_PASSWORD_HERE",
+            username: process.env.REACT_APP_TURN_USERNAME,
+            credential: process.env.REACT_APP_TURN_CREDENTIAL,
         },
-    ]
-};
+  ],
+}
 const getAvatarColor = (name) => {
     const darkColors = ['#5c2b29', '#2e4934', '#334863', '#4d3b5b', '#624128', '#2b5a5b', '#4a4a4a'];
     let hash = 0;
@@ -283,26 +282,47 @@ export default function VideoMeetComponent(){
         processFrame();
     };
 
-    let gotMessageFromServer =(fromId, message)=>{
-        var signal = JSON.parse(message)
-        if(fromId !== socketIdRef.current){
-            if(signal.sdp){
-                connections[fromId].setRemoteDescription(new RTCSessionDescription(signal.sdp))
-                .then(()=>{
-                    if(signal.sdp.type === "offer"){
-                        connections[fromId].createAnswer().then((description)=>{
-                            connections[fromId].setLocalDescription(description).then(()=>{
-                                socketRef.current.emit("signal", fromId, JSON.stringify({"sdp": connections[fromId].localDescription}))
-                            }).catch(e => console.log(e))
-                        }).catch(e => console.log(e))
-                    }
-                }).catch(e => console.log(e))
+    let gotMessageFromServer = async (fromId, message) => {
+    try {
+        var signal = JSON.parse(message);
+        if (fromId === socketIdRef.current) return;
+        
+        const pc = connections[fromId];
+        if (!pc) return; 
+
+        // Handle SDP (Offer/Answer)
+        if (signal.sdp) {
+            await pc.setRemoteDescription(new RTCSessionDescription(signal.sdp));
+            
+            // Process any ICE candidates that arrived too early
+            if (pc.iceQueue && pc.iceQueue.length > 0) {
+                for (let ice of pc.iceQueue) {
+                    await pc.addIceCandidate(new RTCIceCandidate(ice));
+                }
+                pc.iceQueue = []; 
             }
-            if(signal.ice){
-                connections[fromId].addIceCandidate(new RTCIceCandidate(signal.ice)).catch(e => console.log(e));
+
+            if (signal.sdp.type === "offer") {
+                const answer = await pc.createAnswer();
+                await pc.setLocalDescription(answer);
+                socketRef.current.emit("signal", fromId, JSON.stringify({"sdp": pc.localDescription}));
             }
         }
+
+        // Handle ICE Candidates
+        if (signal.ice) {
+            if (pc.remoteDescription && pc.remoteDescription.type) {
+                await pc.addIceCandidate(new RTCIceCandidate(signal.ice));
+            } else {
+                // RACE CONDITION PREVENTION: Queue candidate if SDP isn't ready
+                if (!pc.iceQueue) pc.iceQueue = [];
+                pc.iceQueue.push(signal.ice);
+            }
+        }
+    } catch (error) {
+        console.error("[WebRTC Signaling Error]:", error);
     }
+};
     let connectToSocketServer = ()=>{
         socketRef.current = io.connect(server_url, {secure: false})
         socketRef.current.on('signal', gotMessageFromServer); 
@@ -468,11 +488,7 @@ export default function VideoMeetComponent(){
                 if (window.localStream) {
                     window.localStream.getTracks().forEach(track => pc.addTrack(track, window.localStream));
                 }
-                pc.createOffer().then((description) => {
-                    pc.setLocalDescription(description).then(() => {
-                        socketRef.current.emit("signal", incomingSocketId, JSON.stringify({ "sdp": pc.localDescription }));
-                    });
-                }).catch(e => console.error(e));
+                
             });
             socketRef.current.on("get-existing-users", (existingUsers) => {
                 setMeetingState("joined");              
